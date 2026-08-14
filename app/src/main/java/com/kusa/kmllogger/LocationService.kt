@@ -1,0 +1,229 @@
+package com.kusa.kmllogger
+
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.app.Service
+import android.content.Intent
+import android.content.pm.ServiceInfo
+import android.location.Location
+import android.os.Build
+import android.os.HandlerThread
+import android.os.IBinder
+import android.os.Looper
+import android.util.Log
+import androidx.core.app.NotificationCompat
+import androidx.localbroadcastmanager.content.LocalBroadcastManager
+import com.google.android.gms.location.FusedLocationProviderClient
+import com.google.android.gms.location.LocationCallback
+import com.google.android.gms.location.LocationRequest
+import com.google.android.gms.location.LocationResult
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+
+class LocationService : Service() {
+
+    private lateinit var fusedLocationClient: FusedLocationProviderClient
+    private lateinit var kmlManager: KmlManager
+    private var isLogging = false
+    private var isPaused = false
+
+    // バックグラウンドスレッドで位置情報コールバックを受け取るためのHandlerThread
+    private var locationHandlerThread: HandlerThread? = null
+    private var locationLooper: Looper? = null
+
+    private val locationCallback = object : LocationCallback() {
+        override fun onLocationResult(locationResult: LocationResult) {
+            Log.d("LocationService", "onLocationResult: ${locationResult.locations.size} locations found")
+            if (isLogging && !isPaused) {
+                for (location in locationResult.locations) {
+                    Log.d("LocationService", "Recording interval location: ${location.latitude}, ${location.longitude}")
+                    recordLocation(location)
+                }
+            }
+        }
+    }
+
+    override fun onCreate() {
+        super.onCreate()
+        fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
+        kmlManager = KmlManager(this)
+        createNotificationChannel()
+
+        // 専用バックグラウンドスレッドを起動
+        locationHandlerThread = HandlerThread("LocationHandlerThread").also {
+            it.start()
+            locationLooper = it.looper
+        }
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        when (intent?.action) {
+            ACTION_START -> {
+                val fileName = intent.getStringExtra(EXTRA_FILE_NAME)
+                startLogging(fileName)
+            }
+            ACTION_PAUSE -> pauseLogging()
+            ACTION_RESUME -> resumeLogging()
+            ACTION_STOP -> stopLogging()
+        }
+        return START_STICKY
+    }
+
+    private fun startLogging(fileName: String?) {
+        if (isLogging) return
+        isLogging = true
+        isPaused = false
+        kmlManager.startNewLog(fileName)
+
+        val notification = createNotification("GPS Logging Started")
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
+        } else {
+            startForeground(NOTIFICATION_ID, notification)
+        }
+
+        requestLocationUpdates()
+        recordCurrentLocation("START")
+    }
+
+    private fun pauseLogging() {
+        recordCurrentLocation("PAUSE")
+        isPaused = true
+        updateNotification("Logging Paused")
+    }
+
+    private fun resumeLogging() {
+        isPaused = false
+        recordCurrentLocation("RESUME")
+        updateNotification("Logging Resumed")
+    }
+
+    private fun stopLogging() {
+        recordCurrentLocation("STOP")
+        isLogging = false
+        fusedLocationClient.removeLocationUpdates(locationCallback)
+        kmlManager.finishLog()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+        } else {
+            @Suppress("DEPRECATION")
+            stopForeground(true)
+        }
+        stopSelf()
+    }
+
+    private fun recordCurrentLocation(eventLabel: String) {
+        Log.d("LocationService", "recordCurrentLocation: event=$eventLabel")
+        try {
+            fusedLocationClient.lastLocation.addOnSuccessListener { location ->
+                if (location != null) {
+                    Log.d("LocationService", "Immediate location found for $eventLabel")
+                    recordLocation(location, eventLabel)
+                } else {
+                    Log.d("LocationService", "No lastLocation available for $eventLabel")
+                }
+            }
+        } catch (e: SecurityException) {
+            Log.e("LocationService", "SecurityException in recordCurrentLocation", e)
+        }
+    }
+
+    private fun recordLocation(location: Location, eventLabel: String? = null) {
+        Log.d("LocationService", "recordLocation: ${location.latitude}, ${location.longitude} (event=$eventLabel)")
+        kmlManager.appendLocation(location.latitude, location.longitude, location.altitude)
+        updateNotification("Recording: ${location.latitude}, ${location.longitude}")
+
+        // Broadcast for UI
+        val intent = Intent(ACTION_LOCATION_UPDATE).apply {
+            putExtra(EXTRA_LAT, location.latitude)
+            putExtra(EXTRA_LNG, location.longitude)
+            putExtra(EXTRA_TIME, SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date()))
+            putExtra(EXTRA_EVENT, eventLabel)
+        }
+        LocalBroadcastManager.getInstance(this).sendBroadcast(intent)
+    }
+
+    @Suppress("DEPRECATION")
+    private fun requestLocationUpdates() {
+        Log.d("LocationService", "requestLocationUpdates: Interval=60s")
+
+        // LocationRequest.Builder は play-services-location:21+ から。
+        // 古いAPIでも動作する @Deprecated の LocationRequest.create() を使用。
+        val locationRequest = LocationRequest.create().apply {
+            interval = 60_000L          // 目標インターバル: 1分
+            fastestInterval = 60_000L   // 最小インターバル: 1分（早期配信を防ぐ）
+            priority = Priority.PRIORITY_HIGH_ACCURACY
+        }
+
+        val looper = locationLooper ?: Looper.getMainLooper()
+
+        try {
+            fusedLocationClient.requestLocationUpdates(locationRequest, locationCallback, looper)
+        } catch (e: SecurityException) {
+            Log.e("LocationService", "SecurityException in requestLocationUpdates", e)
+            stopLogging()
+        }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        // HandlerThreadを安全にシャットダウン
+        locationHandlerThread?.quitSafely()
+        locationHandlerThread = null
+        locationLooper = null
+    }
+
+    private fun createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                CHANNEL_ID,
+                "GPS Logger Service",
+                NotificationManager.IMPORTANCE_LOW
+            )
+            val manager = getSystemService(NotificationManager::class.java)
+            manager.createNotificationChannel(channel)
+        }
+    }
+
+    private fun createNotification(content: String): Notification {
+        val intent = Intent(this, MainActivity::class.java)
+        val pendingIntent = PendingIntent.getActivity(this, 0, intent, PendingIntent.FLAG_IMMUTABLE)
+
+        return NotificationCompat.Builder(this, CHANNEL_ID)
+            .setContentTitle("KML Logger")
+            .setContentText(content)
+            .setSmallIcon(android.R.drawable.ic_menu_mylocation)
+            .setContentIntent(pendingIntent)
+            .build()
+    }
+
+    private fun updateNotification(content: String) {
+        val notification = createNotification(content)
+        val manager = getSystemService(NotificationManager::class.java)
+        manager.notify(NOTIFICATION_ID, notification)
+    }
+
+    override fun onBind(intent: Intent?): IBinder? = null
+
+    companion object {
+        const val ACTION_START = "com.kusa.kmllogger.START"
+        const val ACTION_PAUSE = "com.kusa.kmllogger.PAUSE"
+        const val ACTION_RESUME = "com.kusa.kmllogger.RESUME"
+        const val ACTION_STOP = "com.kusa.kmllogger.STOP"
+        const val EXTRA_FILE_NAME = "extra_file_name"
+
+        const val ACTION_LOCATION_UPDATE = "com.kusa.kmllogger.LOCATION_UPDATE"
+        const val EXTRA_LAT = "extra_lat"
+        const val EXTRA_LNG = "extra_lng"
+        const val EXTRA_TIME = "extra_time"
+        const val EXTRA_EVENT = "extra_event"
+
+        private const val NOTIFICATION_ID = 1
+        private const val CHANNEL_ID = "gps_logger_channel"
+    }
+}

@@ -5,6 +5,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.location.Location
@@ -71,13 +72,15 @@ class LocationService : Service() {
             ACTION_RESUME -> resumeLogging()
             ACTION_STOP -> stopLogging()
         }
-        return START_STICKY
+        return START_NOT_STICKY
     }
 
     private fun startLogging(fileName: String?) {
         if (isLogging) return
         isLogging = true
         isPaused = false
+        Companion.isRunning = true
+        Companion.isPaused = false
         kmlManager.startNewLog(fileName)
 
         val notification = createNotification(getString(R.string.notification_started))
@@ -89,31 +92,49 @@ class LocationService : Service() {
 
         requestLocationUpdates()
         recordCurrentLocation("START")
+        sendStateBroadcast()
     }
 
     private fun pauseLogging() {
+        if (!isLogging || isPaused) return
         recordCurrentLocation("PAUSE")
         isPaused = true
+        Companion.isPaused = true
         updateNotification(getString(R.string.notification_paused))
+        sendStateBroadcast()
     }
 
     private fun resumeLogging() {
+        if (!isLogging || !isPaused) return
         isPaused = false
+        Companion.isPaused = false
         recordCurrentLocation("RESUME")
         updateNotification(getString(R.string.notification_resumed))
+        sendStateBroadcast()
     }
 
     private fun stopLogging() {
+        if (!isLogging && !Companion.isRunning) return
         recordCurrentLocation("STOP")
         isLogging = false
+        isPaused = false
+        Companion.isRunning = false
+        Companion.isPaused = false
+
         fusedLocationClient.removeLocationUpdates(locationCallback)
         kmlManager.finishLog()
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             stopForeground(STOP_FOREGROUND_REMOVE)
         } else {
             @Suppress("DEPRECATION")
             stopForeground(true)
         }
+
+        val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        notificationManager.cancel(NOTIFICATION_ID)
+
+        sendStateBroadcast()
         stopSelf()
     }
 
@@ -136,7 +157,11 @@ class LocationService : Service() {
     private fun recordLocation(location: Location, eventLabel: String? = null) {
         Log.d("LocationService", "recordLocation: ${location.latitude}, ${location.longitude} (event=$eventLabel)")
         kmlManager.appendLocation(location.latitude, location.longitude, location.altitude)
-        updateNotification(getString(R.string.notification_recording, location.latitude, location.longitude))
+
+        // 記録中のみ通知を更新（停止処理中の非同期コールバックによる通知復活を防ぐ）
+        if (isLogging) {
+            updateNotification(getString(R.string.notification_recording, location.latitude, location.longitude))
+        }
 
         // Broadcast for UI
         val intent = Intent(ACTION_LOCATION_UPDATE).apply {
@@ -152,8 +177,6 @@ class LocationService : Service() {
     private fun requestLocationUpdates() {
         Log.d("LocationService", "requestLocationUpdates: Interval=60s")
 
-        // LocationRequest.Builder は play-services-location:21+ から。
-        // 古いAPIでも動作する @Deprecated の LocationRequest.create() を使用。
         val locationRequest = LocationRequest.create().apply {
             interval = 60_000L          // 目標インターバル: 1分
             fastestInterval = 60_000L   // 最小インターバル: 1分（早期配信を防ぐ）
@@ -170,8 +193,21 @@ class LocationService : Service() {
         }
     }
 
+    private fun sendStateBroadcast() {
+        val intent = Intent(ACTION_STATE_CHANGED).apply {
+            putExtra(EXTRA_IS_RUNNING, Companion.isRunning)
+            putExtra(EXTRA_IS_PAUSED, Companion.isPaused)
+        }
+        LocalBroadcastManager.getInstance(this).sendBroadcast(intent)
+    }
+
     override fun onDestroy() {
         super.onDestroy()
+        Companion.isRunning = false
+        Companion.isPaused = false
+        val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        notificationManager.cancel(NOTIFICATION_ID)
+
         // HandlerThreadを安全にシャットダウン
         locationHandlerThread?.quitSafely()
         locationHandlerThread = null
@@ -191,18 +227,42 @@ class LocationService : Service() {
     }
 
     private fun createNotification(content: String): Notification {
-        val intent = Intent(this, MainActivity::class.java)
-        val pendingIntent = PendingIntent.getActivity(this, 0, intent, PendingIntent.FLAG_IMMUTABLE)
+        val intent = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        val pendingIntent = PendingIntent.getActivity(
+            this,
+            0,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val stopIntent = Intent(this, LocationService::class.java).apply {
+            action = ACTION_STOP
+        }
+        val stopPendingIntent = PendingIntent.getService(
+            this,
+            1,
+            stopIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle(getString(R.string.app_name))
             .setContentText(content)
             .setSmallIcon(android.R.drawable.ic_menu_mylocation)
             .setContentIntent(pendingIntent)
+            .addAction(
+                android.R.drawable.ic_menu_close_clear_cancel,
+                getString(R.string.btn_stop),
+                stopPendingIntent
+            )
+            .setOngoing(true)
             .build()
     }
 
     private fun updateNotification(content: String) {
+        if (!isLogging) return
         val notification = createNotification(content)
         val manager = getSystemService(NotificationManager::class.java)
         manager.notify(NOTIFICATION_ID, notification)
@@ -211,6 +271,11 @@ class LocationService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     companion object {
+        var isRunning: Boolean = false
+            private set
+        var isPaused: Boolean = false
+            private set
+
         const val ACTION_START = "com.kusa.kmllogger.START"
         const val ACTION_PAUSE = "com.kusa.kmllogger.PAUSE"
         const val ACTION_RESUME = "com.kusa.kmllogger.RESUME"
@@ -222,6 +287,10 @@ class LocationService : Service() {
         const val EXTRA_LNG = "extra_lng"
         const val EXTRA_TIME = "extra_time"
         const val EXTRA_EVENT = "extra_event"
+
+        const val ACTION_STATE_CHANGED = "com.kusa.kmllogger.STATE_CHANGED"
+        const val EXTRA_IS_RUNNING = "extra_is_running"
+        const val EXTRA_IS_PAUSED = "extra_is_paused"
 
         private const val NOTIFICATION_ID = 1
         private const val CHANNEL_ID = "gps_logger_channel"

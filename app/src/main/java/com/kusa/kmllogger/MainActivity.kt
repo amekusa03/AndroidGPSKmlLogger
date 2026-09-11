@@ -48,6 +48,14 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private val stateReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            val isRunning = intent?.getBooleanExtra(LocationService.EXTRA_IS_RUNNING, false) ?: false
+            val isLoggingPaused = intent?.getBooleanExtra(LocationService.EXTRA_IS_PAUSED, false) ?: false
+            updateUi(isRunning, isLoggingPaused)
+        }
+    }
+
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
@@ -110,17 +118,26 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        // 画面復帰時にサービスの稼働状態に合わせてUIを同期
+        updateUi(LocationService.isRunning, LocationService.isPaused)
+    }
+
     override fun onStart() {
         super.onStart()
-        LocalBroadcastManager.getInstance(this).registerReceiver(
-            locationReceiver,
-            IntentFilter(LocationService.ACTION_LOCATION_UPDATE)
-        )
+        val filter = IntentFilter().apply {
+            addAction(LocationService.ACTION_LOCATION_UPDATE)
+            addAction(LocationService.ACTION_STATE_CHANGED)
+        }
+        LocalBroadcastManager.getInstance(this).registerReceiver(locationReceiver, IntentFilter(LocationService.ACTION_LOCATION_UPDATE))
+        LocalBroadcastManager.getInstance(this).registerReceiver(stateReceiver, IntentFilter(LocationService.ACTION_STATE_CHANGED))
     }
 
     override fun onStop() {
         super.onStop()
         LocalBroadcastManager.getInstance(this).unregisterReceiver(locationReceiver)
+        LocalBroadcastManager.getInstance(this).unregisterReceiver(stateReceiver)
     }
 
     private fun checkPermissionsAndStart() {
@@ -182,7 +199,7 @@ class MainActivity : AppCompatActivity() {
         } else {
             startService(intent)
         }
-        updateUi(true)
+        updateUi(true, false)
     }
 
     private fun pauseLogging() {
@@ -190,9 +207,7 @@ class MainActivity : AppCompatActivity() {
             action = LocationService.ACTION_PAUSE
         }
         startService(intent)
-        isPaused = true
-        btnPauseResume.text = getString(R.string.btn_resume)
-        tvStatus.text = getString(R.string.status_paused)
+        updateUi(true, true)
     }
 
     private fun resumeLogging() {
@@ -200,9 +215,7 @@ class MainActivity : AppCompatActivity() {
             action = LocationService.ACTION_RESUME
         }
         startService(intent)
-        isPaused = false
-        btnPauseResume.text = getString(R.string.btn_pause)
-        tvStatus.text = getString(R.string.status_logging)
+        updateUi(true, false)
     }
 
     private fun stopLogging() {
@@ -210,23 +223,30 @@ class MainActivity : AppCompatActivity() {
             action = LocationService.ACTION_STOP
         }
         startService(intent)
-        updateUi(false)
+        updateUi(false, false)
     }
 
-    private fun updateUi(isLogging: Boolean) {
+    private fun updateUi(isLogging: Boolean, isPaused: Boolean = false) {
+        this.isPaused = isPaused
         if (isLogging) {
             btnStart.visibility = View.GONE
             btnPauseResume.visibility = View.VISIBLE
             btnStop.visibility = View.VISIBLE
             etFileName.isEnabled = false
-            tvStatus.text = getString(R.string.status_logging)
+            if (isPaused) {
+                btnPauseResume.text = getString(R.string.btn_resume)
+                tvStatus.text = getString(R.string.status_paused)
+            } else {
+                btnPauseResume.text = getString(R.string.btn_pause)
+                tvStatus.text = getString(R.string.status_logging)
+            }
         } else {
             btnStart.visibility = View.VISIBLE
             btnPauseResume.visibility = View.GONE
             btnStop.visibility = View.GONE
             etFileName.isEnabled = true
             tvStatus.text = getString(R.string.status_idle)
-            isPaused = false
+            this.isPaused = false
             btnPauseResume.text = getString(R.string.btn_pause)
         }
     }

@@ -1,3 +1,25 @@
 <resources>
     <string name="app_name">KmlLogger</string>
+    <string name="title_gps_kml_logger">GPS KML Logger</string>
+    <string name="hint_filename">Filename (default: timestamp)</string>
+    <string name="btn_start">Start</string>
+    <string name="btn_pause">Pause</string>
+    <string name="btn_resume">Resume</string>
+    <string name="btn_stop">Stop</string>
+    <string name="status_idle">Status: Idle</string>
+    <string name="status_logging">Status: Logging</string>
+    <string name="status_paused">Status: Paused</string>
+
+    <string name="permission_location_required">Location permission is required</string>
+    <string name="permission_background_recommended">Background location is recommended for screen-off logging</string>
+    <string name="dialog_bg_permission_title">Background Location Required</string>
+    <string name="dialog_bg_permission_message">To record GPS even when the screen is off, please select \'Allow all the time\' in the next screen.</string>
+    <string name="dialog_btn_settings">Settings</string>
+    <string name="dialog_btn_maybe_later">Maybe Later</string>
+
+    <string name="notification_channel_name">GPS Logger Service</string>
+    <string name="notification_started">GPS Logging Started</string>
+    <string name="notification_paused">Logging Paused</string>
+    <string name="notification_resumed">Logging Resumed</string>
+    <string name="notification_recording">Recording: %1$.6f, %2$.6f</string>
 </resources>

@@ -1,0 +1,25 @@
+<resources>
+    <string name="app_name">KmlLogger</string>
+    <string name="title_gps_kml_logger">GPS KML Logger</string>
+    <string name="hint_filename">ファイル名（デフォルト: 日時）</string>
+    <string name="btn_start">開始</string>
+    <string name="btn_pause">一時停止</string>
+    <string name="btn_resume">再開</string>
+    <string name="btn_stop">停止</string>
+    <string name="status_idle">ステータス: 待機中</string>
+    <string name="status_logging">ステータス: 記録中</string>
+    <string name="status_paused">ステータス: 一時停止中</string>
+
+    <string name="permission_location_required">位置情報の権限が必要です</string>
+    <string name="permission_background_recommended">画面オフ時の記録にはバックグラウンド位置情報権限を推奨します</string>
+    <string name="dialog_bg_permission_title">バックグラウンド位置情報の権限</string>
+    <string name="dialog_bg_permission_message">画面オフ時でもGPSを記録するには、次の画面で「常に許可」を選択してください。</string>
+    <string name="dialog_btn_settings">設定を開く</string>
+    <string name="dialog_btn_maybe_later">後で</string>
+
+    <string name="notification_channel_name">GPSロガーサービス</string>
+    <string name="notification_started">GPS記録を開始しました</string>
+    <string name="notification_paused">GPS記録を一時停止中</string>
+    <string name="notification_resumed">GPS記録を再開しました</string>
+    <string name="notification_recording">記録中: %1$.6f, %2$.6f</string>
+</resources>

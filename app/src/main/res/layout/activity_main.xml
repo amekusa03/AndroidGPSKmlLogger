@@ -22,7 +22,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="GPS KML Logger"
+                android:text="@string/title_gps_kml_logger"
                 android:textSize="24sp"
                 android:textStyle="bold"
                 android:layout_marginBottom="16dp"/>
@@ -30,7 +30,7 @@
             <com.google.android.material.textfield.TextInputLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:hint="Filename (default: timestamp)"
+                android:hint="@string/hint_filename"
                 android:layout_marginBottom="16dp"
                 style="@style/Widget.Material3.TextInputLayout.OutlinedBox">
 
@@ -51,7 +51,7 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="Start"
+                    android:text="@string/btn_start"
                     android:layout_marginEnd="4dp"/>
 
                 <Button
@@ -59,7 +59,7 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="Pause"
+                    android:text="@string/btn_pause"
                     android:layout_marginLeft="4dp"
                     android:layout_marginRight="4dp"
                     android:visibility="gone"/>
@@ -69,7 +69,7 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="Stop"
+                    android:text="@string/btn_stop"
                     android:layout_marginStart="4dp"
                     style="@style/Widget.Material3.Button.TonalButton"
                     android:visibility="gone"/>
@@ -79,7 +79,7 @@
                 android:id="@+id/tvStatus"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Status: Idle"
+                android:text="@string/status_idle"
                 android:layout_marginTop="8dp"
                 android:textStyle="italic"/>
 

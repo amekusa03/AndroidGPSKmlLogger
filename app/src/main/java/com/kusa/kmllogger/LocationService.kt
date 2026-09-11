@@ -80,7 +80,7 @@ class LocationService : Service() {
         isPaused = false
         kmlManager.startNewLog(fileName)
 
-        val notification = createNotification("GPS Logging Started")
+        val notification = createNotification(getString(R.string.notification_started))
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
         } else {
@@ -94,13 +94,13 @@ class LocationService : Service() {
     private fun pauseLogging() {
         recordCurrentLocation("PAUSE")
         isPaused = true
-        updateNotification("Logging Paused")
+        updateNotification(getString(R.string.notification_paused))
     }
 
     private fun resumeLogging() {
         isPaused = false
         recordCurrentLocation("RESUME")
-        updateNotification("Logging Resumed")
+        updateNotification(getString(R.string.notification_resumed))
     }
 
     private fun stopLogging() {
@@ -136,7 +136,7 @@ class LocationService : Service() {
     private fun recordLocation(location: Location, eventLabel: String? = null) {
         Log.d("LocationService", "recordLocation: ${location.latitude}, ${location.longitude} (event=$eventLabel)")
         kmlManager.appendLocation(location.latitude, location.longitude, location.altitude)
-        updateNotification("Recording: ${location.latitude}, ${location.longitude}")
+        updateNotification(getString(R.string.notification_recording, location.latitude, location.longitude))
 
         // Broadcast for UI
         val intent = Intent(ACTION_LOCATION_UPDATE).apply {
@@ -182,7 +182,7 @@ class LocationService : Service() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                "GPS Logger Service",
+                getString(R.string.notification_channel_name),
                 NotificationManager.IMPORTANCE_LOW
             )
             val manager = getSystemService(NotificationManager::class.java)
@@ -195,7 +195,7 @@ class LocationService : Service() {
         val pendingIntent = PendingIntent.getActivity(this, 0, intent, PendingIntent.FLAG_IMMUTABLE)
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("KML Logger")
+            .setContentTitle(getString(R.string.app_name))
             .setContentText(content)
             .setSmallIcon(android.R.drawable.ic_menu_mylocation)
             .setContentIntent(pendingIntent)

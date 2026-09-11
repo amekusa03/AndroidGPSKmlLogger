@@ -57,7 +57,7 @@ class MainActivity : AppCompatActivity() {
         if (granted) {
             checkBackgroundLocationPermission()
         } else {
-            Toast.makeText(this, "Location permission is required", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.permission_location_required), Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -67,7 +67,7 @@ class MainActivity : AppCompatActivity() {
         if (granted) {
             startLoggingService()
         } else {
-            Toast.makeText(this, "Background location is recommended for screen-off logging", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, getString(R.string.permission_background_recommended), Toast.LENGTH_LONG).show()
             startLoggingService()
         }
     }
@@ -157,14 +157,14 @@ class MainActivity : AppCompatActivity() {
 
     private fun showBackgroundPermissionDialog() {
         AlertDialog.Builder(this)
-            .setTitle("Background Location Required")
-            .setMessage("To record GPS even when the screen is off, please select 'Allow all the time' in the next screen.")
-            .setPositiveButton("Settings") { _, _ ->
+            .setTitle(R.string.dialog_bg_permission_title)
+            .setMessage(R.string.dialog_bg_permission_message)
+            .setPositiveButton(R.string.dialog_btn_settings) { _, _ ->
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                     backgroundPermissionLauncher.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
                 }
             }
-            .setNegativeButton("Maybe Later") { _, _ ->
+            .setNegativeButton(R.string.dialog_btn_maybe_later) { _, _ ->
                 startLoggingService()
             }
             .show()
@@ -191,8 +191,8 @@ class MainActivity : AppCompatActivity() {
         }
         startService(intent)
         isPaused = true
-        btnPauseResume.text = "Resume"
-        tvStatus.text = "Status: Paused"
+        btnPauseResume.text = getString(R.string.btn_resume)
+        tvStatus.text = getString(R.string.status_paused)
     }
 
     private fun resumeLogging() {
@@ -201,8 +201,8 @@ class MainActivity : AppCompatActivity() {
         }
         startService(intent)
         isPaused = false
-        btnPauseResume.text = "Pause"
-        tvStatus.text = "Status: Logging"
+        btnPauseResume.text = getString(R.string.btn_pause)
+        tvStatus.text = getString(R.string.status_logging)
     }
 
     private fun stopLogging() {
@@ -219,15 +219,15 @@ class MainActivity : AppCompatActivity() {
             btnPauseResume.visibility = View.VISIBLE
             btnStop.visibility = View.VISIBLE
             etFileName.isEnabled = false
-            tvStatus.text = "Status: Logging"
+            tvStatus.text = getString(R.string.status_logging)
         } else {
             btnStart.visibility = View.VISIBLE
             btnPauseResume.visibility = View.GONE
             btnStop.visibility = View.GONE
             etFileName.isEnabled = true
-            tvStatus.text = "Status: Idle"
+            tvStatus.text = getString(R.string.status_idle)
             isPaused = false
-            btnPauseResume.text = "Pause"
+            btnPauseResume.text = getString(R.string.btn_pause)
         }
     }
 }
